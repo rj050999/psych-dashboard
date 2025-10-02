@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Wellness Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind to use Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Load Chart.js and Datalabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        /* Custom scrollbar for aesthetics */
+        body::-webkit-scrollbar { width: 8px; }
+        body::-webkit-scrollbar-track { background: #f0f4f8; }
+        body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .card { transition: all 0.2s ease-in-out; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        /* Style for the chart overlay message */
+        .chart-message-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 10;
+            border-radius: 0.75rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans p-4 sm:p-8 min-h-screen">
+
+    <header class="mb-8" >
+        <h1 class="text-4xl font-extrabold text-gray-800 mb-2">ZOMATO 360° Wellness Dashboard</h1>
+        <p class="text-lg text-gray-600">Analyzing key indicators for 100 employees across different roles and departments.</p>
+    </header>
+
+    <!-- Filter and Controls -->
+    <section id="controls" class="bg-white p-4 rounded-xl shadow-lg mb-8 flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6">
+        <div class="flex items-center space-x-3 w-full md:w-auto">
+            <label for="deptFilter" class="text-gray-700 font-semibold whitespace-nowrap">Department:</label>
+            <select id="deptFilter" class="p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 w-full">
+                <option value="ALL">ALL</option>
+            </select>
+        </div>
+
+        <div class="flex items-center space-x-3 w-full md:w-auto">
+            <label for="roleFilter" class="text-gray-700 font-semibold whitespace-nowrap">Role:</label>
+            <select id="roleFilter" class="p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 w-full">
+                <option value="ALL">ALL</option>
+            </select>
+        </div>
+
+        <button id="resetBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 w-full md:w-auto">
+            Reset Filters
+        </button>
+    </section>
+
+    <!-- Metric Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Avg Stress Score -->
+        <div class="card bg-white p-5 rounded-xl shadow-lg border-l-4 border-red-500">
+            <p class="text-sm font-medium text-gray-500">Avg Stress Score (Target: 50)</p>
+            <div class="flex items-center justify-between mt-1">
+                <p id="avgStressScore" class="text-3xl font-bold text-gray-900">--</p>
+                <span id="diffStress">--</span>
+            </div>
+        </div>
+
+        <!-- Avg PERMA Score -->
+        <div class="card bg-white p-5 rounded-xl shadow-lg border-l-4 border-green-500">
+            <p class="text-sm font-medium text-gray-500">Avg PERMA Score (Target: 70)</p>
+            <div class="flex items-center justify-between mt-1">
+                <p id="avgPermaScore" class="text-3xl font-bold text-gray-900">--</p>
+                <span id="diffPerma">--</span>
+            </div>
+        </div>
+
+        <!-- Family Coverage -->
+        <div class="card bg-white p-5 rounded-xl shadow-lg border-l-4 border-blue-500">
+            <p class="text-sm font-medium text-gray-500">Family Covered % (Target: 80%)</p>
+            <div class="flex items-center justify-between mt-1">
+                <p id="avgFamilyCoverage" class="text-3xl font-bold text-gray-900">--</p>
+                <span id="diffFamily">--</span>
+            </div>
+        </div>
+
+        <!-- Therapy Usage -->
+        <div class="card bg-white p-5 rounded-xl shadow-lg border-l-4 border-yellow-500">
+            <p class="text-sm font-medium text-gray-500">Therapy Usage % (Target: 30%)</p>
+            <div class="flex items-center justify-between mt-1">
+                <p id="avgTherapyUsage" class="text-3xl font-bold text-gray-900">--</p>
+                <span id="diffTherapy">--</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Heatmap and Burnout Pie -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Department Heatmap Table -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Department Performance Heatmap</h2>
+            <div class="overflow-x-auto">
+                <table id="heatmapTable" class="min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                            <th class="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Stress</th>
+                            <th class="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg PERMA</th>
+                            <th class="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Therapy %</th>
+                            <th class="px-1 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Upskilling %</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <!-- Table rows generated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <p class="mt-4 text-xs text-gray-500">Color gradient: Red/Low = Poor Performance (Stress), Green/High = Good Performance (PERMA, Usage, Upskilling).</p>
+        </div>
+
+        <!-- Burnout Risk Pie Chart -->
+        <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg flex flex-col">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Burnout Risk Distribution</h2>
+            <div class="h-50 relative">
+                <canvas id="chartBurnoutPie"></canvas>
+            </div>
+            <!-- Custom Legend -->
+            <div class="flex justify-center space-x-4 mt-4 text-sm font-medium">
+                <div class="flex items-center"><span class="h-3 w-3 rounded-full bg-red-500 mr-2"></span>High</div>
+                <div class="flex items-center"><span class="h-3 w-3 rounded-full bg-yellow-500 mr-2"></span>Medium</div>
+                <div class="flex items-center"><span class="h-3 w-3 rounded-full bg-green-500 mr-2"></span>Low</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bar Charts Section -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Avg Stress Score by Department -->
+        <div id="chartStressDeptWrapper" class="bg-white p-6 rounded-xl shadow-lg relative">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Avg Stress Score by Department</h2>
+            <div class="h-64 relative">
+                <canvas id="chartStressDept"></canvas>
+            </div>
+        </div>
+
+        <!-- Stress Score Distribution (Bins) -->
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Stress Score Distribution (Employee Count)</h2>
+            <div class="h-64 relative">
+                <canvas id="chartStressBins"></canvas>
+            </div>
+        </div>
+
+        <!-- Avg Upskilling % by Role (Horizontal) -->
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Avg Upskilling % by Role</h2>
+            <div class="h-64 relative">
+                <canvas id="chartUpskillRole"></canvas>
+            </div>
+        </div>
+        
+        <!-- Avg Upskilling % by Department -->
+        <div id="chartUpskillDeptWrapper" class="bg-white p-6 rounded-xl shadow-lg relative">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Avg Upskilling % by Department</h2>
+            <div class="h-64 relative">
+                <canvas id="chartUpskillDept"></canvas>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Complete JavaScript Code -->
+    <script>
+        // --- Data Definition ---
+        // 'Delivery Partner' is the role to be excluded from department-level views when filtered specifically.
+        const EXCLUDED_DEPARTMENT_ROLE = 'Delivery Partner';
+        
+        // --- EXPANDED DATASET (100 RECORDS) ---
+        let data = [
+          // Original 40 Records
+          {id:1,name:'Amit',department:'Tech',role:'Employee',stressScore:62,permaScore:68,familyCoveredPct:75,therapyUsagePct:10,upskillingPct:40,burnoutRisk:'Medium'},
+          {id:2,name:'Priya',department:'Support',role:'Manager',stressScore:44,permaScore:72,familyCoveredPct:90,therapyUsagePct:35,upskillingPct:60,burnoutRisk:'Low'},
+          {id:3,name:'Ravi',department:'Outsourced',role:'Delivery Partner',stressScore:78,permaScore:52,familyCoveredPct:40,therapyUsagePct:5,upskillingPct:10,burnoutRisk:'High'},
+          {id:4,name:'Sneha',department:'Tech',role:'Employee',stressScore:55,permaScore:75,familyCoveredPct:85,therapyUsagePct:25,upskillingPct:80,burnoutRisk:'Low'},
+          {id:5,name:'Karan',department:'Sales',role:'Employee',stressScore:70,permaScore:58,familyCoveredPct:60,therapyUsagePct:12,upskillingPct:20,burnoutRisk:'High'},
+          {id:6,name:'Meera',department:'Support',role:'Employee',stressScore:40,permaScore:82,familyCoveredPct:95,therapyUsagePct:30,upskillingPct:50,burnoutRisk:'Low'},
+          {id:7,name:'Rahul',department:'Operations',role:'Employee',stressScore:67,permaScore:62,familyCoveredPct:50,therapyUsagePct:8,upskillingPct:15,burnoutRisk:'Medium'},
+          {id:8,name:'Anita',department:'Sales',role:'Manager',stressScore:48,permaScore:70,familyCoveredPct:88,therapyUsagePct:40,upskillingPct:65,burnoutRisk:'Low'},
+          {id:9,name:'Vikram',department:'Tech',role:'Employee',stressScore:33,permaScore:66,familyCoveredPct:20,therapyUsagePct:2,upskillingPct:35,burnoutRisk:'Low'},
+          {id:10,name:'Lata',department:'Tech',role:'Manager',stressScore:58,permaScore:69,familyCoveredPct:78,therapyUsagePct:20,upskillingPct:55,burnoutRisk:'Medium'},
+          
+          {id:11,name:'John',department:'Outsourced',role:'Delivery Partner',stressScore:82,permaScore:45,familyCoveredPct:30,therapyUsagePct:0,upskillingPct:5,burnoutRisk:'High'},
+          {id:12,name:'Sara',department:'Support',role:'Employee',stressScore:51,permaScore:77,familyCoveredPct:80,therapyUsagePct:22,upskillingPct:75,burnoutRisk:'Low'},
+          {id:13,name:'Raj',department:'Sales',role:'Employee',stressScore:65,permaScore:60,familyCoveredPct:70,therapyUsagePct:15,upskillingPct:30,burnoutRisk:'Medium'},
+          {id:14,name:'Emily',department:'Tech',role:'Employee',stressScore:39,permaScore:85,familyCoveredPct:92,therapyUsagePct:45,upskillingPct:90,burnoutRisk:'Low'},
+          {id:15,name:'David',department:'Operations',role:'Manager',stressScore:59,permaScore:65,familyCoveredPct:65,therapyUsagePct:18,upskillingPct:45,burnoutRisk:'Medium'},
+          {id:16,name:'Nina',department:'Outsourced',role:'Delivery Partner',stressScore:73,permaScore:50,familyCoveredPct:45,therapyUsagePct:10,upskillingPct:25,burnoutRisk:'High'},
+          {id:17,name:'Sam',department:'Sales',role:'Manager',stressScore:53,permaScore:78,familyCoveredPct:82,therapyUsagePct:38,upskillingPct:70,burnoutRisk:'Low'},
+          {id:18,name:'Chris',department:'Tech',role:'Employee',stressScore:41,permaScore:79,familyCoveredPct:88,therapyUsagePct:33,upskillingPct:68,burnoutRisk:'Low'},
+          {id:19,name:'Jaya',department:'Operations',role:'Employee',stressScore:71,permaScore:56,familyCoveredPct:55,therapyUsagePct:14,upskillingPct:28,burnoutRisk:'Medium'},
+          {id:20,name:'Mark',department:'Support',role:'Manager',stressScore:46,permaScore:74,familyCoveredPct:94,therapyUsagePct:37,upskillingPct:85,burnoutRisk:'Low'},
+          {id:21,name:'Ivan',department:'Outsourced',role:'Delivery Partner',stressScore:80,permaScore:48,familyCoveredPct:35,therapyUsagePct:7,upskillingPct:15,burnoutRisk:'High'},
+          {id:22,name:'Chen',department:'Tech',role:'Manager',stressScore:50,permaScore:71,familyCoveredPct:77,therapyUsagePct:28,upskillingPct:60,burnoutRisk:'Medium'},
+          {id:23,name:'Alex',department:'Operations',role:'Employee',stressScore:60,permaScore:67,familyCoveredPct:68,therapyUsagePct:16,upskillingPct:38,burnoutRisk:'Medium'},
+          {id:24,name:'Gina',department:'Support',role:'Employee',stressScore:42,permaScore:81,familyCoveredPct:90,therapyUsagePct:42,upskillingPct:72,burnoutRisk:'Low'},
+          {id:25,name:'Todd',department:'Sales',role:'Employee',stressScore:75,permaScore:54,familyCoveredPct:52,therapyUsagePct:11,upskillingPct:22,burnoutRisk:'High'},
+          {id:26,name:'Vina',department:'Tech',role:'Employee',stressScore:54,permaScore:73,familyCoveredPct:83,therapyUsagePct:27,upskillingPct:58,burnoutRisk:'Medium'},
+          {id:27,name:'Omar',department:'Outsourced',role:'Delivery Partner',stressScore:85,permaScore:42,familyCoveredPct:25,therapyUsagePct:4,upskillingPct:8,burnoutRisk:'High'},
+          {id:28,name:'Luna',department:'Support',role:'Employee',stressScore:47,permaScore:76,familyCoveredPct:91,therapyUsagePct:39,upskillingPct:78,burnoutRisk:'Low'},
+          {id:29,name:'Mike',department:'Sales',role:'Manager',stressScore:57,permaScore:64,familyCoveredPct:72,therapyUsagePct:19,upskillingPct:32,burnoutRisk:'Medium'},
+          {id:30,name:'Heidi',department:'Tech',role:'Manager',stressScore:61,permaScore:63,familyCoveredPct:74,therapyUsagePct:17,upskillingPct:48,burnoutRisk:'Medium'},
+          {id:31,name:'Pavel',department:'Operations',role:'Employee',stressScore:74,permaScore:51,familyCoveredPct:48,therapyUsagePct:9,upskillingPct:18,burnoutRisk:'High'},
+          {id:32,name:'Kim',department:'Support',role:'Employee',stressScore:43,permaScore:80,familyCoveredPct:93,therapyUsagePct:44,upskillingPct:88,burnoutRisk:'Low'},
+          {id:33,name:'Sean',department:'Sales',role:'Employee',stressScore:69,permaScore:57,familyCoveredPct:62,therapyUsagePct:13,upskillingPct:24,burnoutRisk:'Medium'},
+          {id:34,name:'Niko',department:'Tech',role:'Employee',stressScore:38,permaScore:77,familyCoveredPct:86,therapyUsagePct:31,upskillingPct:62,burnoutRisk:'Low'},
+          {id:35,name:'Zoe',department:'Outsourced',role:'Delivery Partner',stressScore:79,permaScore:47,familyCoveredPct:38,therapyUsagePct:6,upskillingPct:12,burnoutRisk:'High'},
+          {id:36,name:'Elias',department:'Support',role:'Manager',stressScore:45,permaScore:73,familyCoveredPct:90,therapyUsagePct:36,upskillingPct:76,burnoutRisk:'Low'},
+          {id:37,name:'Mia',department:'Sales',role:'Employee',stressScore:56,permaScore:68,familyCoveredPct:76,therapyUsagePct:21,upskillingPct:42,burnoutRisk:'Medium'},
+          {id:38,name:'Rico',department:'Tech',role:'Employee',stressScore:52,permaScore:70,familyCoveredPct:80,therapyUsagePct:24,upskillingPct:52,burnoutRisk:'Medium'},
+          {id:39,name:'Josh',department:'Operations',role:'Manager',stressScore:63,permaScore:61,familyCoveredPct:58,therapyUsagePct:15,upskillingPct:34,burnoutRisk:'Medium'},
+          {id:40,name:'Ivy',department:'Support',role:'Employee',stressScore:49,permaScore:79,familyCoveredPct:95,therapyUsagePct:41,upskillingPct:82,burnoutRisk:'Low'},
+
+          // 60 NEW Records (41-100)
+          {id:41,name:'Worker 41',department:'Tech',role:'Employee',stressScore:58,permaScore:71,familyCoveredPct:85,therapyUsagePct:30,upskillingPct:65,burnoutRisk:'Medium'},
+          {id:42,name:'Specialist 42',department:'Sales',role:'Employee',stressScore:72,permaScore:55,familyCoveredPct:60,therapyUsagePct:10,upskillingPct:25,burnoutRisk:'High'},
+          {id:43,name:'Leader 43',department:'Operations',role:'Manager',stressScore:50,permaScore:75,familyCoveredPct:90,therapyUsagePct:45,upskillingPct:80,burnoutRisk:'Low'},
+          {id:44,name:'Partner 44',department:'Outsourced',role:'Delivery Partner',stressScore:77,permaScore:48,familyCoveredPct:35,therapyUsagePct:5,upskillingPct:15,burnoutRisk:'High'},
+          {id:45,name:'Analyst 45',department:'Tech',role:'Employee',stressScore:41,permaScore:80,familyCoveredPct:95,therapyUsagePct:50,upskillingPct:95,burnoutRisk:'Low'},
+          {id:46,name:'Dev 46',department:'Tech',role:'Employee',stressScore:65,permaScore:60,familyCoveredPct:70,therapyUsagePct:15,upskillingPct:40,burnoutRisk:'Medium'},
+          {id:47,name:'Ops 47',department:'Operations',role:'Employee',stressScore:70,permaScore:58,familyCoveredPct:50,therapyUsagePct:12,upskillingPct:20,burnoutRisk:'Medium'},
+          {id:48,name:'Sales Rep 48',department:'Sales',role:'Manager',stressScore:45,permaScore:78,familyCoveredPct:88,therapyUsagePct:42,upskillingPct:75,burnoutRisk:'Low'},
+          {id:49,name:'CSR 49',department:'Support',role:'Employee',stressScore:53,permaScore:74,familyCoveredPct:80,therapyUsagePct:28,upskillingPct:55,burnoutRisk:'Medium'},
+          {id:50,name:'Manager 50',department:'Tech',role:'Manager',stressScore:60,permaScore:67,familyCoveredPct:78,therapyUsagePct:22,upskillingPct:50,burnoutRisk:'Medium'},
+          {id:51,name:'Partner 51',department:'Outsourced',role:'Delivery Partner',stressScore:88,permaScore:40,familyCoveredPct:20,therapyUsagePct:0,upskillingPct:5,burnoutRisk:'High'},
+          {id:52,name:'Specialist 52',department:'Support',role:'Employee',stressScore:49,permaScore:82,familyCoveredPct:92,therapyUsagePct:33,upskillingPct:70,burnoutRisk:'Low'},
+          {id:53,name:'Worker 53',department:'Sales',role:'Employee',stressScore:68,permaScore:56,familyCoveredPct:65,therapyUsagePct:18,upskillingPct:35,burnoutRisk:'Medium'},
+          {id:54,name:'Leader 54',department:'Tech',role:'Manager',stressScore:37,permaScore:84,familyCoveredPct:98,therapyUsagePct:48,upskillingPct:85,burnoutRisk:'Low'},
+          {id:55,name:'Ops 55',department:'Operations',role:'Employee',stressScore:76,permaScore:50,familyCoveredPct:45,therapyUsagePct:9,upskillingPct:10,burnoutRisk:'High'},
+          {id:56,name:'Partner 56',department:'Outsourced',role:'Delivery Partner',stressScore:79,permaScore:46,familyCoveredPct:30,therapyUsagePct:3,upskillingPct:8,burnoutRisk:'Medium'},
+          {id:57,name:'Analyst 57',department:'Sales',role:'Employee',stressScore:51,permaScore:72,familyCoveredPct:75,therapyUsagePct:27,upskillingPct:60,burnoutRisk:'Medium'},
+          {id:58,name:'Dev 58',department:'Tech',role:'Employee',stressScore:43,permaScore:79,familyCoveredPct:90,therapyUsagePct:38,upskillingPct:78,burnoutRisk:'Low'},
+          {id:59,name:'Worker 59',department:'Operations',role:'Manager',stressScore:64,permaScore:63,familyCoveredPct:68,therapyUsagePct:17,upskillingPct:30,burnoutRisk:'Medium'},
+          {id:60,name:'CSR 60',department:'Support',role:'Manager',stressScore:47,permaScore:76,familyCoveredPct:94,therapyUsagePct:40,upskillingPct:88,burnoutRisk:'Low'},
+          {id:61,name:'Sales Rep 61',department:'Sales',role:'Employee',stressScore:73,permaScore:53,familyCoveredPct:55,therapyUsagePct:14,upskillingPct:28,burnoutRisk:'High'},
+          {id:62,name:'Manager 62',department:'Tech',role:'Employee',stressScore:56,permaScore:70,familyCoveredPct:82,therapyUsagePct:25,upskillingPct:55,burnoutRisk:'Medium'},
+          {id:63,name:'Partner 63',department:'Outsourced',role:'Delivery Partner',stressScore:81,permaScore:44,familyCoveredPct:28,therapyUsagePct:6,upskillingPct:12,burnoutRisk:'Low'},
+          {id:64,name:'Specialist 64',department:'Support',role:'Employee',stressScore:40,permaScore:81,familyCoveredPct:89,therapyUsagePct:36,upskillingPct:74,burnoutRisk:'Low'},
+          {id:65,name:'Worker 65',department:'Sales',role:'Employee',stressScore:66,permaScore:59,familyCoveredPct:71,therapyUsagePct:16,upskillingPct:33,burnoutRisk:'Medium'},
+          {id:66,name:'Analyst 66',department:'Tech',role:'Employee',stressScore:35,permaScore:86,familyCoveredPct:97,therapyUsagePct:55,upskillingPct:92,burnoutRisk:'Low'},
+          {id:67,name:'Dev 67',department:'Operations',role:'Employee',stressScore:75,permaScore:52,familyCoveredPct:42,therapyUsagePct:8,upskillingPct:14,burnoutRisk:'High'},
+          {id:68,name:'Ops 68',department:'Outsourced',role:'Delivery Partner',stressScore:83,permaScore:43,familyCoveredPct:26,therapyUsagePct:2,upskillingPct:7,burnoutRisk:'High'},
+          {id:69,name:'Sales Rep 69',department:'Sales',role:'Manager',stressScore:54,permaScore:77,familyCoveredPct:85,therapyUsagePct:39,upskillingPct:70,burnoutRisk:'Low'},
+          {id:70,name:'CSR 70',department:'Tech',role:'Manager',stressScore:62,permaScore:65,familyCoveredPct:76,therapyUsagePct:20,upskillingPct:45,burnoutRisk:'Medium'},
+          {id:71,name:'Manager 71',department:'Operations',role:'Manager',stressScore:57,permaScore:68,familyCoveredPct:70,therapyUsagePct:21,upskillingPct:40,burnoutRisk:'Medium'},
+          {id:72,name:'Partner 72',department:'Support',role:'Employee',stressScore:45,permaScore:78,familyCoveredPct:91,therapyUsagePct:31,upskillingPct:68,burnoutRisk:'Low'},
+          {id:73,name:'Specialist 73',department:'Sales',role:'Employee',stressScore:70,permaScore:57,familyCoveredPct:63,therapyUsagePct:13,upskillingPct:29,burnoutRisk:'Medium'},
+          {id:74,name:'Worker 74',department:'Tech',role:'Employee',stressScore:42,permaScore:80,familyCoveredPct:88,therapyUsagePct:34,upskillingPct:72,burnoutRisk:'Low'},
+          {id:75,name:'Analyst 75',department:'Outsourced',role:'Delivery Partner',stressScore:84,permaScore:41,familyCoveredPct:33,therapyUsagePct:1,upskillingPct:6,burnoutRisk:'Medium'},
+          {id:76,name:'Dev 76',department:'Support',role:'Manager',stressScore:48,permaScore:75,familyCoveredPct:93,therapyUsagePct:37,upskillingPct:80,burnoutRisk:'Low'},
+          {id:77,name:'Ops 77',department:'Sales',role:'Employee',stressScore:61,permaScore:66,familyCoveredPct:74,therapyUsagePct:23,upskillingPct:47,burnoutRisk:'Medium'},
+          {id:78,name:'Sales Rep 78',department:'Tech',role:'Employee',stressScore:50,permaScore:73,familyCoveredPct:81,therapyUsagePct:26,upskillingPct:58,burnoutRisk:'Medium'},
+          {id:79,name:'CSR 79',department:'Operations',role:'Employee',stressScore:78,permaScore:49,familyCoveredPct:46,therapyUsagePct:11,upskillingPct:16,burnoutRisk:'High'},
+          {id:80,name:'Manager 80',department:'Support',role:'Employee',stressScore:39,permaScore:83,familyCoveredPct:96,therapyUsagePct:46,upskillingPct:90,burnoutRisk:'Low'},
+          {id:81,name:'Partner 81',department:'Outsourced',role:'Delivery Partner',stressScore:85,permaScore:40,familyCoveredPct:25,therapyUsagePct:4,upskillingPct:9,burnoutRisk:'Low'},
+          {id:82,name:'Specialist 82',department:'Tech',role:'Manager',stressScore:59,permaScore:69,familyCoveredPct:79,therapyUsagePct:24,upskillingPct:53,burnoutRisk:'Medium'},
+          {id:83,name:'Worker 83',department:'Operations',role:'Employee',stressScore:65,permaScore:62,familyCoveredPct:53,therapyUsagePct:19,upskillingPct:36,burnoutRisk:'Medium'},
+          {id:84,name:'Leader 84',department:'Support',role:'Employee',stressScore:44,permaScore:79,familyCoveredPct:87,therapyUsagePct:35,upskillingPct:70,burnoutRisk:'Low'},
+          {id:85,name:'Analyst 85',department:'Sales',role:'Employee',stressScore:71,permaScore:55,familyCoveredPct:58,therapyUsagePct:15,upskillingPct:21,burnoutRisk:'High'},
+          {id:86,name:'Dev 86',department:'Tech',role:'Employee',stressScore:53,permaScore:72,familyCoveredPct:84,therapyUsagePct:29,upskillingPct:61,burnoutRisk:'Medium'},
+          {id:87,name:'Ops 87',department:'Outsourced',role:'Delivery Partner',stressScore:77,permaScore:48,familyCoveredPct:36,therapyUsagePct:7,upskillingPct:13,burnoutRisk:'Low'},
+          {id:88,name:'Sales Rep 88',department:'Support',role:'Manager',stressScore:46,permaScore:74,familyCoveredPct:90,therapyUsagePct:38,upskillingPct:77,burnoutRisk:'Low'},
+          {id:89,name:'CSR 89',department:'Sales',role:'Manager',stressScore:55,permaScore:70,familyCoveredPct:77,therapyUsagePct:20,upskillingPct:41,burnoutRisk:'Medium'},
+          {id:90,name:'Manager 90',department:'Tech',role:'Employee',stressScore:36,permaScore:85,familyCoveredPct:94,therapyUsagePct:47,upskillingPct:89,burnoutRisk:'Low'},
+          {id:91,name:'Partner 91',department:'Operations',role:'Employee',stressScore:69,permaScore:60,familyCoveredPct:51,therapyUsagePct:10,upskillingPct:17,burnoutRisk:'Medium'},
+          {id:92,name:'Specialist 92',department:'Outsourced',role:'Delivery Partner',stressScore:80,permaScore:45,familyCoveredPct:32,therapyUsagePct:1,upskillingPct:6,burnoutRisk:'High'},
+          {id:93,name:'Worker 93',department:'Sales',role:'Employee',stressScore:74,permaScore:52,familyCoveredPct:56,therapyUsagePct:12,upskillingPct:23,burnoutRisk:'High'},
+          {id:94,name:'Leader 94',department:'Tech',role:'Manager',stressScore:47,permaScore:76,familyCoveredPct:89,therapyUsagePct:32,upskillingPct:63,burnoutRisk:'Low'},
+          {id:95,name:'Analyst 95',department:'Operations',role:'Manager',stressScore:62,permaScore:64,familyCoveredPct:67,therapyUsagePct:18,upskillingPct:37,burnoutRisk:'Medium'},
+          {id:96,name:'Dev 96',department:'Support',role:'Employee',stressScore:41,permaScore:81,familyCoveredPct:95,therapyUsagePct:43,upskillingPct:84,burnoutRisk:'Low'},
+          {id:97,name:'Ops 97',department:'Outsourced',role:'Delivery Partner',stressScore:82,permaScore:43,familyCoveredPct:28,therapyUsagePct:5,upskillingPct:11,burnoutRisk:'Medium'},
+          {id:98,name:'Sales Rep 98',department:'Tech',role:'Employee',stressScore:51,permaScore:75,familyCoveredPct:83,therapyUsagePct:27,upskillingPct:59,burnoutRisk:'Medium'},
+          {id:99,name:'CSR 99',department:'Operations',role:'Employee',stressScore:73,permaScore:54,familyCoveredPct:49,therapyUsagePct:9,upskillingPct:19,burnoutRisk:'High'},
+          {id:100,name:'Manager 100',department:'Support',role:'Employee',stressScore:49,permaScore:77,familyCoveredPct:91,therapyUsagePct:40,upskillingPct:79,burnoutRisk:'Low'}
+        ];
+        
+        // --- Chart and Filter State Variables ---
+        let roleFilter, deptFilter;
+        let chartBurnoutPie, chartStressDept, chartUpskillRole, chartUpskillDept, chartStressBins;
+        
+        // --- Utility Functions ---
+
+        function avg(arr){
+          if(!arr || arr.length===0) return 0;
+          return arr.reduce((a,b)=>a+b,0)/arr.length;
+        }
+
+        function diff(val, target){
+          const d = val - target;
+          const style = d > 0 ? 'bg-red-100 text-red-600' : (d < 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600');
+          return `<span class="text-sm font-semibold p-1 rounded-md ${style}">${d > 0 ? '+' : ''}${d.toFixed(1)}</span>`;
+        }
+        
+        // --- Filtering Logic ---
+        function getFilteredData(){
+            const role = roleFilter ? roleFilter.value : 'ALL';
+            const dept = deptFilter ? deptFilter.value : 'ALL';
+            
+            if (role === 'ALL' && dept === 'ALL') {
+              return data;
+            }
+
+            return data.filter(d => {
+              const roleMatch = (role === 'ALL' || d.role === role);
+              const deptMatch = (dept === 'ALL' || d.department === dept);
+              return roleMatch && deptMatch;
+            });
+        }
+        
+        // Helper function to show/hide a message overlay
+        function toggleChartMessage(chartId, show, message) {
+            const wrapper = document.getElementById(chartId + 'Wrapper');
+            if (!wrapper) return;
+
+            let overlay = document.getElementById(chartId + 'Overlay');
+            
+            if (show) {
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = chartId + 'Overlay';
+                    overlay.className = 'chart-message-overlay';
+                    wrapper.appendChild(overlay);
+                }
+                overlay.innerHTML = `<p class="text-gray-500 font-medium text-center p-4">${message}</p>`;
+                overlay.style.display = 'flex';
+                // Find the actual canvas and hide it
+                const canvas = document.getElementById(chartId);
+                if (canvas) canvas.style.visibility = 'hidden';
+            } else {
+                if (overlay) overlay.style.display = 'none';
+                const canvas = document.getElementById(chartId);
+                if (canvas) canvas.style.visibility = 'visible';
+            }
+        }
+
+        // --- Render Function ---
+        function renderAll(){
+          if (!roleFilter || !deptFilter) {
+              console.error("Filters not initialized. Skipping renderAll.");
+              return;
+          }
+          
+          const currentRole = roleFilter.value;
+          const currentDept = deptFilter.value;
+          const filtered = getFilteredData();
+          
+          // Determine if we should exclude department-level views
+          const excludeDepartmentView = currentRole === EXCLUDED_DEPARTMENT_ROLE && currentDept === 'ALL';
+          const exclusionMessage = `Department metrics are excluded when filtering solely by ${EXCLUDED_DEPARTMENT_ROLE} role.`;
+
+
+          // --- 1. Top Cards ---
+          if (filtered.length === 0) {
+            document.getElementById('avgStressScore').textContent = 'N/A';
+            document.getElementById('avgPermaScore').textContent = 'N/A';
+            document.getElementById('avgFamilyCoverage').textContent = 'N/A';
+            document.getElementById('avgTherapyUsage').textContent = 'N/A';
+            document.getElementById('diffStress').innerHTML = 'N/A';
+            document.getElementById('diffPerma').innerHTML = 'N/A';
+            document.getElementById('diffFamily').innerHTML = 'N/A';
+            document.getElementById('diffTherapy').innerHTML = 'N/A';
+            document.querySelector('#heatmapTable tbody').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500 bg-gray-50">No data matches current filters.</td></tr>';
+            
+            if(chartBurnoutPie) chartBurnoutPie.destroy();
+            if(chartStressDept) chartStressDept.destroy();
+            if(chartUpskillRole) chartUpskillRole.destroy();
+            if(chartUpskillDept) chartUpskillDept.destroy();
+            if(chartStressBins) chartStressBins.destroy();
+            
+            toggleChartMessage('chartStressDept', false);
+            toggleChartMessage('chartUpskillDept', false);
+            return; 
+          }
+
+          const avgStress = avg(filtered.map(d=>d.stressScore));
+          const avgPerma = avg(filtered.map(d=>d.permaScore));
+          const avgFamily = avg(filtered.map(d=>d.familyCoveredPct));
+          const avgTherapy = avg(filtered.map(d=>d.therapyUsagePct));
+
+          document.getElementById('avgStressScore').textContent = avgStress.toFixed(0);
+          document.getElementById('avgPermaScore').textContent = avgPerma.toFixed(0);
+          document.getElementById('avgFamilyCoverage').textContent = avgFamily.toFixed(1)+'%';
+          document.getElementById('avgTherapyUsage').textContent = avgTherapy.toFixed(1)+'%';
+
+          document.getElementById('diffStress').innerHTML = diff(avgStress, 50);
+          document.getElementById('diffPerma').innerHTML = diff(avgPerma, 70);
+          document.getElementById('diffFamily').innerHTML = diff(avgFamily, 80);
+          document.getElementById('diffTherapy').innerHTML = diff(avgTherapy, 30);
+
+
+          // --- 2. Heatmap Table ---
+          const heatmapBody = document.querySelector('#heatmapTable tbody');
+          heatmapBody.innerHTML = '';
+          
+          if (excludeDepartmentView) {
+              heatmapBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500 bg-gray-50">${exclusionMessage}</td></tr>`;
+          } else {
+              // Calculate global min/max for coloring
+              const allStress = data.map(d => d.stressScore);
+              const allPerma = data.map(d => d.permaScore);
+              const allTherapy = data.map(d => d.therapyUsagePct);
+              const allUpskilling = data.map(d => d.upskillingPct);
+
+              const maxStress = Math.max(...allStress);
+              const minStress = Math.min(...allStress);
+              const maxPerma = Math.max(...allPerma);
+              const minPerma = Math.min(...allPerma);
+              const maxTherapy = Math.max(...allTherapy);
+              const minTherapy = Math.min(...allTherapy);
+              const maxUpskilling = Math.max(...allUpskilling);
+              const minUpskilling = Math.min(...allUpskilling);
+
+              function getGradientColor(value, min, max, reverse=false) {
+                  if(max === min) return '#eee';
+                  let ratio = (value - min) / (max - min);
+                  if (reverse) ratio = 1 - ratio; 
+                  
+                  let color;
+                  if (ratio < 0.5) {
+                      const r = 255;
+                      const g = Math.round(510 * ratio);
+                      const b = 0;
+                      color = `rgb(${r}, ${g}, ${b})`;
+                  } else {
+                      const r = Math.round(510 * (1 - ratio));
+                      const g = 255;
+                      const b = 0;
+                      color = `rgb(${r}, ${g}, ${b})`;
+                  }
+                  return `color-mix(in srgb, ${color} 70%, #fff)`; 
+              }
+
+              const deptMap = {};
+              data.forEach(d => { if (!deptMap[d.department]) deptMap[d.department] = { stress: [], perma: [], therapy: [], upskilling: [] }; });
+              
+              const filteredDeptMap = {};
+              filtered.forEach(d => {
+                if (!filteredDeptMap[d.department]) {
+                     filteredDeptMap[d.department] = { stress: [], perma: [], therapy: [], upskilling: [] };
+                }
+                filteredDeptMap[d.department].stress.push(d.stressScore);
+                filteredDeptMap[d.department].perma.push(d.permaScore);
+                filteredDeptMap[d.department].therapy.push(d.therapyUsagePct);
+                filteredDeptMap[d.department].upskilling.push(d.upskillingPct);
+              });
+
+              const heatmapLabels = Object.keys(deptMap).sort();
+
+              heatmapLabels.forEach(dept => {
+                  const metrics = filteredDeptMap[dept] || { stress: [], perma: [], therapy: [], upskilling: [] };
+
+                  const avgS = avg(metrics.stress);
+                  const avgP = avg(metrics.perma);
+                  const avgT = avg(metrics.therapy);
+                  const avgU = avg(metrics.upskilling);
+
+                  const stressColor = getGradientColor(avgS, minStress, maxStress, true);
+                  const permaColor = getGradientColor(avgP, minPerma, maxPerma, false);
+                  const therapyColor = getGradientColor(avgT, minTherapy, maxTherapy, false);
+                  const upskillColor = getGradientColor(avgU, minUpskilling, maxUpskilling, false);
+
+                  const row = `
+                      <tr class="hover:bg-gray-50">
+                          <td class="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${dept}</td>
+                          <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-700" style="background:${avgS > 0 ? stressColor : ''};">${avgS.toFixed(1)}</td>
+                          <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-700" style="background:${avgP > 0 ? permaColor : ''};">${avgP.toFixed(1)}</td>
+                          <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-700" style="background:${avgT > 0 ? therapyColor : ''};">${avgT.toFixed(1)}%</td>
+                          <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-700" style="background:${avgU > 0 ? upskillColor : ''};">${avgU.toFixed(1)}%</td>
+                      </tr>
+                  `;
+                  heatmapBody.innerHTML += row;
+              });
+          }
+
+          // --- 3. Pie Chart (Burnout Risk) - Always renders ---
+          const pieData = [
+              filtered.filter(d=>d.burnoutRisk==='High').length,
+              filtered.filter(d=>d.burnoutRisk==='Medium').length,
+              filtered.filter(d=>d.burnoutRisk==='Low').length,
+          ];
+
+          if(chartBurnoutPie) chartBurnoutPie.destroy();
+          const ctxPie = document.getElementById('chartBurnoutPie').getContext('2d');
+          chartBurnoutPie = new Chart(ctxPie,{
+              type:'pie',
+              data:{
+                  labels:['High','Medium','Low'],
+                  datasets:[{
+                      data:pieData,
+                      backgroundColor:['#ef4444','#f59e0b','#10b981'],
+                      borderColor: '#fff',
+                      borderWidth: 2
+                  }]
+              },
+              options:{
+                  responsive:true,
+                  maintainAspectRatio: false,
+                  plugins:{
+                      legend:{ display: false },
+                      tooltip: {
+                        callbacks: {
+                          label: function(context) {
+                              let label = context.label || '';
+                              if (label) { label += ': '; }
+                              label += context.parsed;
+                              label += ' (' + (context.parsed * 100 / filtered.length).toFixed(1) + '%)';
+                              return label;
+                          }
+                        }
+                      }
+                  }
+              }
+          });
+
+
+          // --- 4. Bar Charts ---
+          
+          // Chart 1: Avg Stress vs Department (Conditional)
+          if(chartStressDept) chartStressDept.destroy();
+          toggleChartMessage('chartStressDept', excludeDepartmentView, exclusionMessage);
+          
+          if (!excludeDepartmentView) {
+              const byDeptStress = {};
+              filtered.forEach(d => {
+                if (!byDeptStress[d.department]) byDeptStress[d.department] = [];
+                byDeptStress[d.department].push(d.stressScore);
+              });
+              const deptLabels = Object.keys(byDeptStress).sort();
+              const deptStressAvg = deptLabels.map(k=>avg(byDeptStress[k]));
+
+              const ctx1 = document.getElementById('chartStressDept').getContext('2d');
+              chartStressDept = new Chart(ctx1,{
+                  type:'bar',
+                  data:{
+                      labels:deptLabels, 
+                      datasets:[{
+                          label:'Avg Stress',
+                          data:deptStressAvg,
+                          backgroundColor: '#3b82f6',
+                          borderColor: '#2563eb',
+                          borderWidth: 3
+                      }]
+                  },
+                  options:{
+                      responsive:true,
+                      plugins:{
+                          legend:{display:false},
+                          datalabels: {
+                              align: 'bottom', anchor: 'end', color: '#333',
+                              font: { weight: 'bold', size: 10 },
+                              formatter: (value) => value.toFixed(1)
+                          }
+                      },
+                      scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+                  }
+              });
+          }
+
+
+          // Chart 2: Upskilling vs Role (Always renders)
+          const byRoleUpskill = {};
+          filtered.forEach(d => {
+            if (!byRoleUpskill[d.role]) byRoleUpskill[d.role] = [];
+            byRoleUpskill[d.role].push(d.upskillingPct);
+          });
+          const roleLabels = Object.keys(byRoleUpskill).sort();
+          const roleUps = roleLabels.map(k=>avg(byRoleUpskill[k]));
+
+          if(chartUpskillRole) chartUpskillRole.destroy();
+          const ctx2 = document.getElementById('chartUpskillRole').getContext('2d');
+          chartUpskillRole = new Chart(ctx2,{
+              type:'bar',
+              data:{
+                  labels:roleLabels,
+                  datasets:[{
+                      label:'Avg Upskilling %',
+                      data:roleUps,
+                      backgroundColor: '#8b5cf6',
+                      borderColor: '#7c3aed',
+                      borderWidth: 3
+                  }]
+              },
+              options:{
+                  indexAxis:'y',
+                  responsive:true,
+                  plugins:{
+                      legend:{display:false},
+                      datalabels: {
+                          align: 'start', anchor: 'end', color: '#333',
+                          font: { weight: 'bold', size: 10 },
+                          formatter: (value) => value.toFixed(1) + '%'
+                      }
+                  },
+                  scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+              }
+          });
+
+
+          // Chart 3: Upskilling by Department (Conditional)
+          if(chartUpskillDept) chartUpskillDept.destroy();
+          toggleChartMessage('chartUpskillDept', excludeDepartmentView, exclusionMessage);
+          
+          if (!excludeDepartmentView) {
+              const byDeptUpskill = {};
+              filtered.forEach(d => {
+                if (!byDeptUpskill[d.department]) byDeptUpskill[d.department] = [];
+                byDeptUpskill[d.department].push(d.upskillingPct);
+              });
+              const deptLabels = Object.keys(byDeptUpskill).sort();
+              const deptUps = deptLabels.map(k=>avg(byDeptUpskill[k] || [])); 
+              
+              const ctx3 = document.getElementById('chartUpskillDept').getContext('2d');
+              chartUpskillDept = new Chart(ctx3,{
+                  type:'bar',
+                  data:{
+                      labels:deptLabels,
+                      datasets:[{
+                          label:'Avg Upskilling %',
+                          data:deptUps,
+                          backgroundColor: '#14b8a6',
+                          borderColor: '#0d9488',
+                          borderWidth: 3
+                      }]
+                  },
+                  options:{
+                      responsive:true,
+                      plugins:{
+                          legend:{display:false},
+                          datalabels: {
+                              align: 'bottom', anchor: 'end', color: '#333',
+                              font: { weight: 'bold', size: 10 },
+                              formatter: (value) => value.toFixed(1) + '%'
+                          }
+                      },
+                      scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+                  }
+              });
+          }
+
+
+          // Chart 4: Stress Bins (Always renders)
+          const bins = ['0-19', '20-39', '40-59', '60-79', '80-100'];
+          const counts = [0, 0, 0, 0, 0];
+          filtered.forEach(d=>{
+            if(d.stressScore<20) counts[0]++;
+            else if(d.stressScore<40) counts[1]++;
+            else if(d.stressScore<60) counts[2]++;
+            else if(d.stressScore<80) counts[3]++;
+            else counts[4]++;
+          });
+
+          if(chartStressBins) chartStressBins.destroy();
+          const ctx4 = document.getElementById('chartStressBins').getContext('2d');
+          chartStressBins = new Chart(ctx4,{
+              type:'bar',
+              data:{
+                  labels:bins,
+                  datasets:[{
+                      label:'Count',
+                      data:counts,
+                      backgroundColor: '#f97316',
+                      borderColor: '#ea580c',
+                      borderWidth: 3
+                  }]
+              },
+              options:{
+                  responsive:true,
+                  plugins:{
+                      legend:{display:false},
+                      datalabels: {
+                          align: 'bottom', anchor: 'end', color: '#333',
+                          font: { weight: 'bold', size: 10 },
+                          formatter: (value) => value
+                      }
+                  },
+                  scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+              }
+          });
+
+          // --- 5. Update Filter Options ---
+          const currentRoleSelection = roleFilter.value;
+          const currentDeptSelection = deptFilter.value;
+
+          const allRoles = [...new Set(data.map(d=>d.role))].sort();
+          roleFilter.innerHTML = '<option value="ALL">ALL</option>' + allRoles.map(r=>`<option value="${r}">${r}</option>`).join('');
+          roleFilter.value = currentRoleSelection;
+
+          const allDepts = [...new Set(data.map(d=>d.department))].sort();
+          deptFilter.innerHTML = '<option value="ALL">ALL</option>' + allDepts.map(d=>`<option value="${d}">${d}</option>`).join('');
+          deptFilter.value = currentDeptSelection;
+        }
+
+        // --- Initialization ---
+        window.onload = function(){
+          roleFilter = document.getElementById('roleFilter');
+          deptFilter = document.getElementById('deptFilter');
+          const resetBtn = document.getElementById('resetBtn'); 
+
+          if (roleFilter) {
+              roleFilter.addEventListener('change', renderAll);
+          } else {
+              console.error("Role filter element not found.");
+          }
+
+          if (deptFilter) {
+              deptFilter.addEventListener('change', renderAll);
+          } else {
+              console.error("Department filter element not found.");
+          }
+          
+          if (resetBtn) {
+              resetBtn.addEventListener('click', ()=>{
+                if (roleFilter) roleFilter.value = 'ALL';
+                if (deptFilter) deptFilter.value = 'ALL';
+                renderAll();
+              });
+          } else {
+              console.error("Reset button element not found.");
+          }
+          
+          if (typeof ChartDataLabels !== 'undefined') {
+              Chart.register(ChartDataLabels);
+          }
+          
+          if (roleFilter && deptFilter) {
+              renderAll();
+          }
+        };
+
+    </script>
+</body>
+</html>
